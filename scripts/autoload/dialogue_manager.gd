@@ -20,8 +20,10 @@ var is_active: bool = false
 
 
 func start(path: String, start_id: String = "start") -> bool:
+	if is_active:
+		return false
 	var graph := _load_graph(path)
-	if graph.is_empty():
+	if graph.is_empty() or not graph.has(start_id) or not graph[start_id] is Dictionary:
 		return false
 	_graph = graph
 	is_active = true
@@ -62,7 +64,7 @@ func choose(index: int) -> void:
 
 
 func _goto(id: String) -> void:
-	if not _graph.has(id):
+	if not _graph.has(id) or not _graph[id] is Dictionary:
 		push_error("DialogueManager: missing node '%s'." % id)
 		_finish()
 		return
@@ -90,12 +92,48 @@ func _finish() -> void:
 
 func _load_graph(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
-		push_error("DialogueManager: dialogue file not found: %s" % path)
+		push_warning("DialogueManager: dialogue file not found: %s" % path)
 		return {}
 	var file := FileAccess.open(path, FileAccess.READ)
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if file == null:
+		return {}
+	var parser := JSON.new()
+	var error := parser.parse(file.get_as_text())
 	file.close()
-	if typeof(parsed) != TYPE_DICTIONARY:
+	var parsed: Variant = parser.data
+	if error != OK or typeof(parsed) != TYPE_DICTIONARY:
 		push_error("DialogueManager: dialogue file is not a JSON object: %s" % path)
 		return {}
+	if not _valid_graph(parsed):
+		return {}
 	return parsed
+
+
+func _valid_graph(graph: Dictionary) -> bool:
+	for id in graph:
+		var node: Variant = graph[id]
+		if not node is Dictionary or not node.get("text") is String:
+			return false
+		if node.has("speaker") and not node.speaker is String:
+			return false
+		if node.has("next") == node.has("choices"):
+			return false
+		var records: Array = [node]
+		if node.has("choices"):
+			if not node.choices is Array or node.choices.is_empty():
+				return false
+			for choice in node.choices:
+				if not choice is Dictionary or not choice.get("text") is String or not choice.has("next"):
+					return false
+				records.append(choice)
+		for record in records:
+			var changes: Variant = record.get("set_flag", {})
+			if not changes is Dictionary:
+				return false
+			for key in changes:
+				if not key is String or not changes[key] is bool:
+					return false
+			if record.has("next") and record.next != null:
+				if not record.next is String or not graph.has(record.next):
+					return false
+	return not graph.is_empty()

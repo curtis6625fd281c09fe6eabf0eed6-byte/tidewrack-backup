@@ -1,7 +1,42 @@
 {
-	"start": {
-		"speaker": "",
-		"text": "The lamp room is colder than the stair. The great light stands dead at its center, the lens dark as a drowned eye. (Draft \u2014 lamp-room content is in progress for the public demo.)",
-		"next": null
-	}
+  "start": {
+    "speaker": "Service Plate",
+    "text": "Trim the wick. Align the lens. Bring the flame to the burner only when both are ready. The instructions are worn smooth where other keepers rested their hands.",
+    "next": null
+  },
+  "wick": {
+    "speaker": "",
+    "text": "You trim the blackened wick until a clean edge remains. Paraffin catches the light on your fingers.",
+    "next": null
+  },
+  "lens": {
+    "speaker": "",
+    "text": "The lens turns against its stops. You settle it into alignment with the north window.",
+    "next": null
+  },
+  "not_ready": {
+    "speaker": "",
+    "text": "Not yet. Check the wick and align the lens before lighting the burner. The service plate will remind you.",
+    "next": null
+  },
+  "relight": {
+    "speaker": "",
+    "text": "The wick takes. Gold rises through the glass, and the lens carries it out into the fog.",
+    "next": "answer"
+  },
+  "answer": {
+    "speaker": "",
+    "text": "Beyond the north rocks: three flashes, then dark. You keep your hand on the warm railing. Three flashes answer again.",
+    "next": "contact"
+  },
+  "contact": {
+    "speaker": "Radio - Tom Salish",
+    "text": "The radio below breaks the silence. \"Marrow light? I can see you from here. Keep it steady. I am listening.\"",
+    "next": null
+  },
+  "already_lit": {
+    "speaker": "",
+    "text": "The lamp holds its rhythm. Beyond the north rocks, the answering light waits between flashes.",
+    "next": null
+  }
 }

@@ -1,148 +1,114 @@
 #!/usr/bin/env python3
-"""Validate Tidewrack dialogue graphs without needing the Godot engine.
-
-Checks, for every data/dialogue/*.json file:
-  - it parses as a JSON object of node_id -> node
-  - each node is either a linear node ("next": id|null) or a choice node
-    ("choices": [{text, next, set_flag?}]) — not neither, not both
-  - every referenced target id exists
-  - at least one terminal (next == null) is reachable from an entry point
-  - reports orphan nodes (unreachable from any known entry) as warnings
-
-Exit code 0 = all valid, 1 = at least one error.
-
-Usage:  python3 tests/validate_dialogue.py
+"""Validate authored dialogue schemas and a route to an ending from every entry.
+This is content validation, not a replacement for the Godot runtime tests.
 """
 from __future__ import annotations
-
 import json
-import sys
 from pathlib import Path
 
-# Entry-point node ids the game starts graphs from (see scripts/game.gd).
-KNOWN_ENTRIES = {"logbook", "radio", "door", "start"}
-
 ROOT = Path(__file__).resolve().parent.parent
-DIALOGUE_DIR = ROOT / "data" / "dialogue"
+ENTRY_POINTS = {
+    'keeper_intro.json': {'logbook', 'radio', 'door'},
+    'lamp_room.json': {'start', 'wick', 'lens', 'not_ready', 'relight', 'already_lit'},
+}
 
 
-def reachable(graph: dict, entries: set[str]) -> set[str]:
-    seen: set[str] = set()
-    stack = [e for e in entries if e in graph]
-    while stack:
-        nid = stack.pop()
-        if nid in seen:
-            continue
-        seen.add(nid)
-        node = graph[nid]
-        targets: list[str] = []
-        if isinstance(node.get("choices"), list):
-            targets += [c.get("next") for c in node["choices"]]
-        if "next" in node:
-            targets.append(node.get("next"))
-        for t in targets:
-            if isinstance(t, str) and t in graph:
-                stack.append(t)
-    return seen
-
-
-def validate_file(path: Path) -> tuple[list[str], list[str]]:
-    errors: list[str] = []
-    warnings: list[str] = []
-
-    try:
-        graph = json.loads(path.read_text())
-    except json.JSONDecodeError as exc:
-        return [f"{path.name}: invalid JSON — {exc}"], warnings
-
-    if not isinstance(graph, dict):
-        return [f"{path.name}: top level must be an object of node_id -> node"], warnings
-
-    has_terminal = False
-    for nid, node in graph.items():
+def validate_graph(graph, entries):
+    errors, warnings = [], []
+    if not isinstance(graph, dict) or not graph:
+        return ['graph must be a nonempty object'], []
+    edges = {key: set() for key in graph}
+    terminals = set()
+    for key, node in graph.items():
         if not isinstance(node, dict):
-            errors.append(f"{path.name}:{nid}: node must be an object")
+            errors.append(f'{key}: node must be an object')
             continue
-
-        has_choices = isinstance(node.get("choices"), list) and len(node["choices"]) > 0
-        has_next = "next" in node
-
-        if not has_choices and not has_next:
-            errors.append(f"{path.name}:{nid}: node has neither 'next' nor 'choices'")
-        if has_choices and has_next:
-            errors.append(f"{path.name}:{nid}: node has both 'next' and 'choices' (ambiguous)")
-
-        if has_next and node.get("next") is None:
-            has_terminal = True
-
-        if has_next and isinstance(node.get("next"), str) and node["next"] not in graph:
-            errors.append(f"{path.name}:{nid}: 'next' points to missing node '{node['next']}'")
-
+        if not isinstance(node.get('text'), str):
+            errors.append(f'{key}: text must be a string')
+        if 'speaker' in node and not isinstance(node['speaker'], str):
+            errors.append(f'{key}: speaker must be a string')
+        has_next, has_choices = 'next' in node, 'choices' in node
+        if has_next == has_choices:
+            errors.append(f'{key}: supply exactly one of next or choices')
+        records = [node]
         if has_choices:
-            for i, choice in enumerate(node["choices"]):
-                if not isinstance(choice, dict) or "text" not in choice:
-                    errors.append(f"{path.name}:{nid}: choice #{i} needs a 'text' field")
+            choices = node['choices']
+            if not isinstance(choices, list) or not choices:
+                errors.append(f'{key}: choices must be a nonempty array')
+                choices = []
+            for index, choice in enumerate(choices):
+                if not isinstance(choice, dict):
+                    errors.append(f'{key}: choice {index} must be an object')
                     continue
-                target = choice.get("next")
-                if target is not None and (not isinstance(target, str) or target not in graph):
-                    errors.append(f"{path.name}:{nid}: choice #{i} 'next' -> missing node '{target}'")
-                if target is None:
-                    has_terminal = True
-
-    if not has_terminal:
-        errors.append(f"{path.name}: no terminal node (a node with next == null) — the graph never ends")
-
-    entries = KNOWN_ENTRIES & set(graph.keys())
-    if not entries:
-        warnings.append(f"{path.name}: no known entry point ({sorted(KNOWN_ENTRIES)}) present")
-    else:
-        seen = reachable(graph, entries)
-        for orphan in sorted(set(graph) - seen):
-            warnings.append(f"{path.name}:{orphan}: unreachable from entry points {sorted(entries)}")
-
+                if not isinstance(choice.get('text'), str) or 'next' not in choice:
+                    errors.append(f'{key}: choice {index} requires text and next')
+                records.append(choice)
+        for record in records:
+            flags = record.get('set_flag', {})
+            if not isinstance(flags, dict) or any(not isinstance(k, str) or type(v) is not bool for k, v in flags.items()):
+                errors.append(f'{key}: set_flag must map strings to booleans')
+            if 'next' not in record:
+                continue
+            target = record['next']
+            if target is None:
+                terminals.add(key)
+            elif not isinstance(target, str) or target not in graph:
+                errors.append(f'{key}: invalid target {target!r}')
+            else:
+                edges[key].add(target)
+    def reachable(start):
+        seen, stack = set(), [start]
+        while stack:
+            key = stack.pop()
+            if key in seen:
+                continue
+            seen.add(key)
+            stack.extend(edges.get(key, ()))
+        return seen
+    seen = set()
+    for entry in entries:
+        if entry not in graph:
+            errors.append(f'missing entry {entry}')
+            continue
+        visit = reachable(entry)
+        seen |= visit
+        if not visit & terminals:
+            errors.append(f'{entry}: no reachable ending')
+    # Also catch a selectable branch entering a loop with no exit.
+    for key in sorted(seen):
+        if not reachable(key) & terminals:
+            errors.append(f'{key}: reachable dead-end loop')
+    for key in sorted(set(graph) - seen):
+        warnings.append(f'{key}: unreachable from declared entries')
     return errors, warnings
 
 
-def main() -> int:
-    files = sorted(DIALOGUE_DIR.glob("*.json"))
+def validate_file(path):
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [str(exc)], []
+    entries = ENTRY_POINTS.get(path.name)
+    if entries is None:
+        return ['declare explicit entry points in ENTRY_POINTS'], []
+    return validate_graph(data, entries)
+
+
+def main():
+    failures = 0
+    files = sorted((ROOT / 'data/dialogue').glob('*.json'))
     if not files:
-        print(f"No dialogue files found in {DIALOGUE_DIR}")
+        print('No dialogue graphs found')
         return 1
-
-    all_errors: list[str] = []
-    all_warnings: list[str] = []
     for path in files:
-        errs, warns = validate_file(path)
-        all_errors += errs
-        all_warnings += warns
-        status = "OK" if not errs else "FAIL"
-        print(f"[{status}] {path.relative_to(ROOT)}  ({len(json.loads(path.read_text()))} nodes)")
+        errors, warnings = validate_file(path)
+        failures += len(errors)
+        print(f"{'FAIL' if errors else 'OK'} {path.name}")
+        for message in errors:
+            print(f'  ERROR: {message}')
+        for message in warnings:
+            print(f'  warning: {message}')
+    return int(failures != 0)
 
-    for w in all_warnings:
-        print(f"  warning: {w}")
-    for e in all_errors:
-        print(f"  ERROR:   {e}")
-
-    print()
-    if all_errors:
-        print(f"✗ {len(all_errors)} error(s), {len(all_warnings)} warning(s)")
-        return 1
-    print(f"✓ all dialogue graphs valid ({len(all_warnings)} warning(s))")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-
-
-# --- Public Demo: journal graphs -------------------------------------------
-# The journal system (scripts/journal.gd) reads discovered-log entries from the
-# same JSON-graph format, so they validate through the checker above. Journal
-# graphs live under data/dialogue/ with an "entry_*" id and are held to the same
-# rules (targets resolve, a terminal exists). This hook is a placeholder until
-# the journal content lands for the public demo.
-JOURNAL_ENTRY_PREFIX = "entry_"
-
-
-def is_journal_graph(graph: dict) -> bool:
-	return any(str(k).startswith(JOURNAL_ENTRY_PREFIX) for k in graph)
+if __name__ == '__main__':
+    raise SystemExit(main())

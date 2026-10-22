@@ -1,102 +1,100 @@
 # Tidewrack
 
-A narrative adventure set on a fog-bound island off the Washington coast. You
-are the new keeper of **Cape Marrow Light**. The keeper before you, Edith Vane,
-rowed out into the fog eleven days ago and did not come back.
+A narrative adventure at Cape Marrow Light, built in **Godot 4.3+** (standard,
+non-.NET). The owner identifies this repository as the demo source.
 
-Built solo by **Fogline Games** (Seattle) in **Godot 4**, shipping to Steam.
+## Implementation update - 22 October 2026
 
-> **Status (owner-confirmed, reconciled 2026-10-22):** This repository is the source the owner identifies as the demo source. Journal, lamp-room and collision work remain incomplete. The `v0.2-demo-rc` tag is missing; exact export/build provenance and runtime acceptance remain outstanding. See [`docs/milestones.md`](docs/milestones.md) for prioritized work.
+The former journal, lamp-room and collision scaffolds are now connected into a
+playable demo loop. The implementation adds safe checkpoint saves, consistent
+pause/settings flow, explicit keyboard/gamepad input and persistent discoveries.
+The original `v0.2-demo-rc` tag was not present and has not been fabricated or moved.
+This is a new source revision, not a claim about the historical Steam upload.
 
-## Controls
+**Verified:** Godot 4.3 headless import/startup, 60 runtime integration checks,
+5 validator regression tests and both authored dialogue graphs.
+**Still required:** desktop visual/audio review, physical controller testing,
+platform exports and Steam build verification. Placeholder primitive art remains;
+no final art/audio assets or Steam integration have been added. New lamp-room
+text and puzzle beats are a playable draft for narrative review.
 
-| Action        | Key                     |
-|---------------|-------------------------|
-| Move          | Arrow keys              |
-| Interact      | Enter / Space           |
-| Advance / skip line | Enter / Space     |
-| Pause / back  | Esc                     |
+## Open and play
 
-The table describes the documented keyboard controls. The snapshot overrides the built-in input actions with gamepad events in `project.godot`; keyboard coexistence and runtime input behavior have not been verified.
+Import `project.godot` in Godot 4.3+ and press F6 on `scenes/main_menu.tscn`, or
+press F5 to run the project. CLI: `godot --path .`.
 
-## Running it
+| Action | Keyboard | Gamepad |
+|---|---|---|
+| Move | Arrows / WASD | Left stick / D-pad |
+| Interact | Enter / Space / E | Bottom face button |
+| Reveal / advance dialogue | Enter / Space | Bottom face button |
+| Journal | J | Top face button |
+| Pause | Esc | Start / right face button |
+| Back in menus | Esc | Right face button |
+| Menu navigation | Arrows / Tab | Stick / D-pad |
 
-Requires **Godot 4.3+** (standard, non-.NET build).
+Prompts switch between keyboard labels and generic controller button positions.
+Controller-brand artwork and user-configurable rebinding are not included.
 
-```bash
-# Open in the editor
-godot -e --path .
+## Demo route
 
-# Or run directly
-godot --path .
+1. Read the logbook downstairs and make both choices. The discovery goes into
+   the journal; choices are stored as story flags.
+2. Enter the stair at the north side of the ground floor.
+3. Read the service plate. Trim the wick and align the lens, then light the burner.
+   Acting out of order offers a reminder rather than a fail state or timer.
+4. Finish the relight conversation to see the demo closing beat. You may continue
+   exploring, return downstairs and reread discoveries.
+5. Pause and save. Restart and Continue to restore the room, story/puzzle flags
+   and journal. Checkpoints resume at the room entrance, not mid-sentence or at
+   an exact coordinate. Saving is unavailable during dialogue.
+
+## Save and settings behavior
+
+- `user://save.json`: current checkpoint; `.bak`: previous valid checkpoint.
+- Writes are staged in `.tmp` and validated before rotating the previous save.
+- Invalid primary saves fall back to a validated backup with a recovery notice.
+- Version-1 saves migrate to version 2 with an empty journal and entrance spawn.
+- New Game resets live progress but keeps the existing disk checkpoint until an
+  explicit confirmed overwrite. It does not reset audio/display preferences.
+- Settings use `user://settings.cfg`. Display changes revert after ten seconds
+  unless confirmed. A save/settings error is shown to the player.
+
+## Code map
+
+- `scripts/game.gd`: shared room construction, static collision, interactables,
+  HUD, pause/journal/confirmation UI and room transitions.
+- `scripts/lamp_room.gd`: selects the lamp-room layout in the shared room shell.
+- `scripts/player.gd`: CharacterBody2D movement and collision.
+- `scripts/autoload/controls.gd`: explicit actions and last-input-device hints.
+- `scripts/autoload/preferences.gd`: audio/display preferences.
+- `scripts/autoload/game_state.gd`: flags, journal discovery state, validated saves.
+- `scripts/journal.gd`: journal definitions and discovery service.
+- `scripts/autoload/dialogue_manager.gd`: validated JSON dialogue playback.
+- `scripts/dialogue_box.gd`: reveal animation, choices and focus.
+- `scripts/ui_helpers.gd`, `settings.gd`, `main_menu.gd`: shared UI and menus.
+- `data/dialogue/`: authored conversation graphs.
+
+## Repeat the checks
+
+Python 3 and a Godot 4.3+ executable are required; no pip dependencies:
+
+```sh
+python3 tests/run_checks.py --godot /absolute/path/to/godot
 ```
 
-The main scene is `scenes/main_menu.tscn`. Saves are written to Godot's
-`user://save.json` (per-OS user data dir).
+The runner imports the project, checks startup and exercises gameplay in a
+headless engine. Runtime tests use separate test save/settings filenames and
+Linux user data is additionally isolated in a temporary directory. Two warnings
+about `res://missing.json` are intentional missing-resource tests.
 
-## Project layout
+For content-only checks:
 
-```
-tidewrack/
-├── project.godot            # engine config; registers the two autoloads
-├── scenes/                  # thin .tscn wrappers (root node + script)
-│   ├── main_menu.tscn
-│   ├── game.tscn            # the vertical-slice level
-│   └── ui/{dialogue_box,settings}.tscn
-├── scripts/
-│   ├── autoload/
-│   │   ├── game_state.gd     # story flags + save/load  (autoload: GameState)
-│   │   └── dialogue_manager.gd  # branching graph player (autoload: DialogueManager)
-│   ├── main_menu.gd, settings.gd
-│   ├── game.gd               # builds the level + HUD + pause menu
-│   ├── player.gd             # top-down movement (Player)
-│   ├── interactable.gd       # examinable world object (Interactable)
-│   └── dialogue_box.gd       # dialogue UI, listens to DialogueManager
-├── data/dialogue/
-│   └── keeper_intro.json     # the keeper's-log conversation
-├── assets/{sprites,audio,fonts}/   # placeholder art for now
-├── tests/validate_dialogue.py      # engine-free dialogue-graph checker
-└── docs/                     # GDD, narrative bible, milestones, credits
-```
-
-**Design note:** UI and levels are constructed in GDScript rather than authored
-as large scene files. This keeps `.tscn` files small and reviewable in diffs and
-avoids merge pain — a deliberate choice for a one-person studio.
-
-## The dialogue system
-
-Conversations are plain JSON graphs in `data/dialogue/`. Each node is either a
-linear line (`"next": "<id>"`, or `null` to end) or a choice node (`"choices"`).
-Any node can set story flags via `"set_flag"`, which `GameState` persists.
-
-```json
-{
-  "start": { "speaker": "Edith", "text": "…", "next": "choice1" },
-  "choice1": {
-    "text": "…",
-    "choices": [
-      { "text": "Trust her", "next": "end", "set_flag": { "trusted_edith": true } }
-    ]
-  },
-  "end": { "speaker": "", "text": "…", "next": null }
-}
-```
-
-## Verifying changes
-
-```bash
-# Validate every dialogue graph (targets resolve, has an ending, no orphans)
+```sh
 python3 tests/validate_dialogue.py
-
-# In-engine checks (requires Godot on PATH)
-godot --headless --path . --check-only   # parse all scripts
+python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-> The GDScript in this build was authored without a local Godot install, so it
-> has been checked statically and via the dialogue validator, **not** yet run in
-> the engine. First engine open may surface minor fixups — tracked in the issue
-> list.
-
-## Steam Next Fest demo
-
-The documented intended demo scope adds the lamp room, discovered-logs journal, controller support and playtest fixes. The owner has confirmed this repository is the demo source. Its journal and lamp-room scaffolds are therefore genuine implementation gaps against the intended demo scope. Gamepad mappings exist, but complete input support still needs verification. The historical feature-freeze/tag claim is unverified: no `v0.2-demo-rc` tag is present here. See [`docs/milestones.md`](docs/milestones.md) for the scope conflict and verification requirements.
+See [the implementation notes](docs/implementation-2026-10-22.md) for changes,
+acceptance checks and remaining limitations. Historical planning records remain
+under `docs/`; their pre-implementation findings are not current completion status.

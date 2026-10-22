@@ -1,204 +1,339 @@
 extends Node2D
-## Game — the vertical-slice level: the ground floor of Cape Marrow Light.
-## Builds the room, player, interactables, HUD prompt, dialogue box, and a
-## pause overlay in code.
-
-const DIALOGUE := "res://data/dialogue/keeper_intro.json"
-const INTERACT_RADIUS := 90.0
-const ROOM := Rect2(120, 140, 1040, 460)
-
+## Shared room shell: input, collision, HUD, modal ownership and checkpoints.
+const ROOM := Rect2(100, 110, 1080, 480)
+const INTRO := "res://data/dialogue/keeper_intro.json"
+const LAMP := "res://data/dialogue/lamp_room.json"
+var room_kind := "ground"
 var _player: Player
 var _interactables: Array[Interactable] = []
 var _prompt: Label
-var _nearest: Interactable = null
-var _paused: bool = false
-
+var _status: Label
+var _lamp_visual: ColorRect
+var _modal: Control
+var _modal_kind := ""
+var _settings: Control
+var _ui: CanvasLayer
+var _ending_pending := false
+var _changing := false
 
 func _ready() -> void:
 	_build_room()
 	_build_player()
 	_build_interactables()
 	_build_hud()
-
-	var dialogue_box := preload("res://scenes/ui/dialogue_box.tscn").instantiate()
-	add_child(dialogue_box)
-
-	DialogueManager.dialogue_started.connect(func(): _set_movement(false))
-	DialogueManager.dialogue_finished.connect(func(): _set_movement(true))
-
+	add_child(preload("res://scenes/ui/dialogue_box.tscn").instantiate())
+	DialogueManager.dialogue_started.connect(_sync_movement)
+	DialogueManager.dialogue_finished.connect(_dialogue_finished)
+	GameState.state_changed.connect(_refresh_world)
+	_refresh_world()
+	if GameState.recovered_backup:
+		GameState.recovered_backup = false
+		_message("Save recovered", "The primary save was unavailable. Your previous backup was loaded.")
 
 func _build_room() -> void:
 	var bg := ColorRect.new()
-	bg.color = Color("#0f1a22")
+	bg.color = Color("#0b141c")
 	bg.size = Vector2(1280, 720)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
-
 	var floor_rect := ColorRect.new()
-	floor_rect.color = Color("#1c2b34")
+	floor_rect.color = Color("#1d3038") if room_kind == "ground" else Color("#24313e")
 	floor_rect.position = ROOM.position
 	floor_rect.size = ROOM.size
+	floor_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(floor_rect)
+	_wall(Rect2(80, 90, 1120, 20))
+	_wall(Rect2(80, 590, 1120, 20))
+	_wall(Rect2(80, 110, 20, 480))
+	_wall(Rect2(1180, 110, 20, 480))
+	if room_kind == "ground":
+		_wall(Rect2(245, 195, 150, 55))
+		_wall(Rect2(920, 195, 150, 55))
+	else:
+		_wall(Rect2(555, 265, 170, 100))
+		_lamp_visual = ColorRect.new()
+		_lamp_visual.position = Vector2(590, 270)
+		_lamp_visual.size = Vector2(100, 85)
+		_lamp_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_lamp_visual)
 
-	var title := Label.new()
-	title.text = "Cape Marrow Light — ground floor"
-	title.position = Vector2(ROOM.position.x, ROOM.position.y - 34)
-	title.modulate = Color(1, 1, 1, 0.5)
-	add_child(title)
-
+func _wall(rect: Rect2) -> void:
+	var body := StaticBody2D.new()
+	body.position = rect.get_center()
+	body.collision_layer = 1
+	body.collision_mask = 2
+	var collision := CollisionShape2D.new()
+	var shape := RectangleShape2D.new()
+	shape.size = rect.size
+	collision.shape = shape
+	body.add_child(collision)
+	add_child(body)
+	var visual := ColorRect.new()
+	visual.position = rect.position
+	visual.size = rect.size
+	visual.color = Color("#3e5158")
+	visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(visual)
 
 func _build_player() -> void:
 	_player = Player.new()
-	_player.bounds = ROOM.grow(-30)
-	_player.position = Vector2(ROOM.position.x + ROOM.size.x * 0.5, ROOM.position.y + ROOM.size.y - 60)
+	_player.position = Vector2(640, 520)
+	if room_kind == "ground" and GameState.spawn_id == "stairs":
+		_player.position = Vector2(640, 230)
 	add_child(_player)
 
-	var camera := Camera2D.new()
-	camera.position_smoothing_enabled = true
-	_player.add_child(camera)
-	camera.make_current()
-
-
 func _build_interactables() -> void:
-	_add_interactable("Logbook", "Read the keeper's log", "logbook",
-		Vector2(ROOM.position.x + 160, ROOM.position.y + 120), Color("#8a6f4b"))
-	_add_interactable("Radio set", "Call the mainland", "radio",
-		Vector2(ROOM.position.x + ROOM.size.x - 180, ROOM.position.y + 130), Color("#4b6f8a"))
-	_add_interactable("Lamp-room stair", "Climb toward the light", "door",
-		Vector2(ROOM.position.x + ROOM.size.x * 0.5, ROOM.position.y + 60), Color("#3a4a54"))
+	if room_kind == "ground":
+		_item("Logbook", "Read Edith's log", "logbook", Vector2(320, 285))
+		_item("Radio", "Call the mainland", "radio", Vector2(1000, 285))
+		_item("Stair", "Enter the lamp room", "stairs", Vector2(640, 160))
+	else:
+		_item("Service plate", "Read the keeper's instructions", "notes", Vector2(260, 260))
+		_item("Wick", "Trim the wick", "wick", Vector2(460, 350))
+		_item("Lens", "Align the lens", "lens", Vector2(820, 350))
+		_item("Burner", "Light the lamp", "ignite", Vector2(640, 405))
+		_item("Stair", "Return downstairs", "return", Vector2(1040, 500))
 
-
-func _add_interactable(label: String, prompt: String, start_id: String, pos: Vector2, color: Color) -> void:
+func _item(title: String, prompt: String, id: String, pos: Vector2) -> void:
 	var item := Interactable.new()
-	item.label = label
+	item.label = title
 	item.prompt_text = prompt
-	item.dialogue_path = DIALOGUE
-	item.dialogue_start = start_id
-	item.color = color
+	item.persistent_id = id
 	item.position = pos
+	item.action = _activate.bind(id)
 	add_child(item)
 	item.setup()
 	_interactables.append(item)
 
+func _activate(id: String) -> bool:
+	match id:
+		"logbook":
+			if DialogueManager.start(INTRO, "logbook"):
+				Journal.discover("edith_log")
+				return true
+			return false
+		"radio": return DialogueManager.start(INTRO, "radio")
+		"stairs": return _travel("res://scenes/lamp_room.tscn", "entrance")
+		"return": return _travel("res://scenes/game.tscn", "stairs")
+		"notes":
+			if not DialogueManager.start(LAMP, "start"):
+				return false
+			Journal.discover("lamp_notes")
+			return true
+		"wick":
+			if not DialogueManager.start(LAMP, "wick"):
+				return false
+			GameState.set_flag("wick_trimmed", true)
+			return true
+		"lens":
+			if not DialogueManager.start(LAMP, "lens"):
+				return false
+			GameState.set_flag("lens_aligned", true)
+			return true
+		"ignite":
+			if GameState.get_flag("lamp_relit", false):
+				return DialogueManager.start(LAMP, "already_lit")
+			if not GameState.get_flag("wick_trimmed", false) or not GameState.get_flag("lens_aligned", false):
+				return DialogueManager.start(LAMP, "not_ready")
+			if not DialogueManager.start(LAMP, "relight"):
+				return false
+			GameState.set_flag("lamp_relit", true)
+			GameState.set_flag("demo_complete", true)
+			Journal.discover("answer")
+			_ending_pending = true
+			return true
+	return false
+
+func _travel(scene: String, spawn: String) -> bool:
+	if _changing:
+		return false
+	var previous_scene := GameState.current_scene
+	var previous_spawn := GameState.spawn_id
+	GameState.current_scene = scene
+	GameState.spawn_id = spawn
+	_changing = true
+	if get_tree().change_scene_to_file(scene) != OK:
+		GameState.current_scene = previous_scene
+		GameState.spawn_id = previous_spawn
+		_changing = false
+		_message("Travel unavailable", "The room could not be loaded.")
+		return false
+	return true
 
 func _build_hud() -> void:
-	var layer := CanvasLayer.new()
-	add_child(layer)
-
+	var hud := CanvasLayer.new()
+	hud.layer = 5
+	add_child(hud)
+	_status = Label.new()
+	_status.position = Vector2(100, 30)
+	_status.add_theme_font_size_override("font_size", 20)
+	hud.add_child(_status)
+	var panel := PanelContainer.new()
+	panel.position = Vector2(100, 625)
+	panel.size = Vector2(1080, 65)
+	hud.add_child(panel)
 	_prompt = Label.new()
-	_prompt.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_prompt.offset_top = -70
-	_prompt.offset_left = -200
-	_prompt.offset_right = 200
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.add_theme_font_size_override("font_size", 20)
-	_prompt.modulate = Color("#ffd466")
-	_prompt.hide()
-	layer.add_child(_prompt)
+	panel.add_child(_prompt)
+	_ui = CanvasLayer.new()
+	_ui.layer = 20
+	add_child(_ui)
 
+func _refresh_world() -> void:
+	if _lamp_visual != null:
+		_lamp_visual.color = Color("#ffd466") if GameState.get_flag("lamp_relit", false) else Color("#535c64")
+	if _status != null:
+		_status.text = "Cape Marrow Light - " + ("ground floor" if room_kind == "ground" else "lamp room")
+		if room_kind == "lamp":
+			_status.text += "\nWick: %s   Lens: %s   Light: %s" % ["trimmed" if GameState.get_flag("wick_trimmed", false) else "untended", "aligned" if GameState.get_flag("lens_aligned", false) else "unaligned", "lit" if GameState.get_flag("lamp_relit", false) else "dark"]
 
-func _process(_delta: float) -> void:
-	if _paused or DialogueManager.is_active:
-		_prompt.hide()
-		return
-	_nearest = _find_nearest()
-	if _nearest != null:
-		_prompt.text = "[ Enter ] %s" % _nearest.prompt_text
-		_prompt.show()
-	else:
-		_prompt.hide()
-
-
-func _find_nearest() -> Interactable:
+func _nearest() -> Interactable:
 	var best: Interactable = null
-	var best_dist := INTERACT_RADIUS
+	var distance := 95.0
 	for item in _interactables:
-		if not item.can_interact():
-			continue
-		var dist := _player.position.distance_to(item.position)
-		if dist <= best_dist:
-			best_dist = dist
+		var d := _player.position.distance_to(item.position)
+		if item.can_interact() and d < distance:
 			best = item
+			distance = d
 	return best
 
+func _process(_delta: float) -> void:
+	if DialogueManager.is_active or _modal != null:
+		_prompt.text = ""
+		return
+	var item := _nearest()
+	_prompt.text = "[%s] Journal    [%s] Pause" % [Controls.hint("journal"), Controls.hint("pause")]
+	if item != null:
+		_prompt.text = "[%s] %s    |    [%s] Journal" % [Controls.hint("interact"), item.prompt_text, Controls.hint("journal")]
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel"):
-		_toggle_pause()
-		get_viewport().set_input_as_handled()
+	if event.is_echo() or _settings != null:
 		return
-	if _paused or DialogueManager.is_active:
+	if _modal != null:
+		if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
+			_close_modal()
+			get_viewport().set_input_as_handled()
 		return
-	if event.is_action_pressed("ui_accept") and _nearest != null:
-		_nearest.interact()
-		get_viewport().set_input_as_handled()
-
-
-func _set_movement(enabled: bool) -> void:
-	if _player != null:
-		_player.can_move = enabled and not _paused
-
-
-func _toggle_pause() -> void:
+	# Safe checkpoints: no pausing/saving halfway through a conversation.
 	if DialogueManager.is_active:
 		return
-	_paused = not _paused
-	_set_movement(not _paused)
-	if _paused:
-		_show_pause_menu()
+	if event.is_action_pressed("pause"):
+		_open_pause()
+	elif event.is_action_pressed("journal"):
+		_open_journal()
+	elif event.is_action_pressed("interact"):
+		var item := _nearest()
+		if item != null:
+			item.interact()
+	else:
+		return
+	get_viewport().set_input_as_handled()
 
+func _sync_movement() -> void:
+	if _player != null:
+		_player.can_move = _modal == null and not DialogueManager.is_active and not _changing
 
-func _show_pause_menu() -> void:
-	var overlay := Control.new()
-	overlay.name = "PauseOverlay"
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var layer := CanvasLayer.new()
-	layer.layer = 20
-	layer.name = "PauseLayer"
-	layer.add_child(overlay)
-	add_child(layer)
+func _dialogue_finished() -> void:
+	_sync_movement()
+	if _ending_pending:
+		_ending_pending = false
+		_message("The light answers", "Three flashes beyond the north rocks.\n\nEnd of the demo. You can keep exploring, reread the journal, or save from the pause menu.")
 
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.6)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.add_child(dim)
+func _new_modal(title: String, kind: String, width: float = 600.0) -> VBoxContainer:
+	_close_modal()
+	_modal = UIHelpers.modal(title, width)
+	_modal_kind = kind
+	_ui.add_child(_modal)
+	_sync_movement()
+	return UIHelpers.column(_modal)
 
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.add_child(center)
+func _close_modal() -> void:
+	if _settings != null:
+		return
+	if _modal != null:
+		_modal.queue_free()
+		_modal = null
+	_modal_kind = ""
+	_sync_movement()
 
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 12)
-	center.add_child(vbox)
-
-	var resume := _menu_button("Resume")
-	resume.pressed.connect(func():
-		layer.queue_free()
-		_paused = false
-		_set_movement(true))
-	vbox.add_child(resume)
-
-	var save := _menu_button("Save")
-	save.pressed.connect(func():
-		GameState.current_scene = scene_file_path
-		var ok := GameState.save_game()
-		save.text = "Saved ✓" if ok else "Save failed")
-	vbox.add_child(save)
-
-	var settings := _menu_button("Settings")
-	settings.pressed.connect(func():
-		overlay.add_child(preload("res://scenes/ui/settings.tscn").instantiate()))
-	vbox.add_child(settings)
-
-	var menu := _menu_button("Main Menu")
-	menu.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main_menu.tscn"))
-	vbox.add_child(menu)
-
+func _open_pause() -> void:
+	var column := _new_modal("Paused", "pause")
+	var resume := UIHelpers.button("Resume", _close_modal)
+	column.add_child(resume)
+	column.add_child(UIHelpers.button("Save checkpoint", _request_save))
+	column.add_child(UIHelpers.button("Journal", _open_journal))
+	var settings_button := UIHelpers.button("Settings", func(): _open_settings())
+	column.add_child(settings_button)
+	column.add_child(UIHelpers.button("Main menu", func(): _confirm("Leave for the main menu?", "Unsaved progress will be lost.", func(): get_tree().change_scene_to_file("res://scenes/main_menu.tscn"))))
+	column.add_child(UIHelpers.text("[%s] Back / Resume" % Controls.hint("ui_cancel")))
 	resume.grab_focus()
 
+func _open_settings() -> void:
+	if _settings != null:
+		return
+	_modal.hide()
+	_settings = preload("res://scenes/ui/settings.tscn").instantiate()
+	_ui.add_child(_settings)
+	_settings.closed.connect(func():
+		_settings = null
+		_modal.show()
+		var column := UIHelpers.column(_modal)
+		(column.get_child(4) as Button).grab_focus())
 
-func _menu_button(text: String) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(200, 40)
-	button.add_theme_font_size_override("font_size", 20)
-	return button
+func _confirm(title: String, body: String, accepted: Callable) -> void:
+	var column := _new_modal(title, "confirm")
+	column.add_child(UIHelpers.text(body))
+	column.add_child(UIHelpers.button("Confirm", accepted))
+	var cancel := UIHelpers.button("Cancel", _open_pause)
+	column.add_child(cancel)
+	cancel.grab_focus()
+
+func _request_save() -> void:
+	if GameState.has_save():
+		_confirm("Replace the current checkpoint?", "The previous valid save is retained as a recovery backup.", _save)
+	else:
+		_save()
+
+func _save() -> void:
+	GameState.current_scene = scene_file_path
+	GameState.spawn_id = "entrance"
+	var ok := GameState.save_game()
+	_message("Checkpoint saved" if ok else "Save failed", "You will resume at this room's entrance with choices, puzzle progress and journal entries preserved." if ok else GameState.last_error)
+
+func _message(title: String, body: String) -> void:
+	var column := _new_modal(title, "message")
+	column.add_child(UIHelpers.text(body))
+	var close := UIHelpers.button("Continue", _close_modal)
+	column.add_child(close)
+	close.grab_focus()
+
+func _open_journal() -> void:
+	var column := _new_modal("Journal", "journal", 850)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 24)
+	column.add_child(row)
+	var list := ItemList.new()
+	list.custom_minimum_size = Vector2(300, 300)
+	row.add_child(list)
+	var reader := RichTextLabel.new()
+	reader.custom_minimum_size = Vector2(520, 300)
+	reader.add_theme_font_size_override("normal_font_size", 22)
+	row.add_child(reader)
+	var entries := Journal.entries()
+	for id in entries:
+		list.add_item(Journal.ENTRIES[id].title)
+	list.item_selected.connect(func(index: int): reader.text = Journal.ENTRIES[entries[index]].text)
+	if entries.is_empty():
+		reader.text = "No entries yet. Read the keeper's log and inspect the service plate upstairs."
+	else:
+		list.select(0)
+		reader.text = Journal.ENTRIES[entries[0]].text
+	var close := UIHelpers.button("Close journal", _close_modal)
+	column.add_child(close)
+	if entries.is_empty():
+		close.grab_focus()
+	else:
+		list.grab_focus()
+	list.focus_neighbor_bottom = list.get_path_to(close)
+	close.focus_neighbor_top = close.get_path_to(list)

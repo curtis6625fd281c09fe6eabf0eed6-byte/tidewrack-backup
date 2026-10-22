@@ -1,94 +1,59 @@
 extends Control
-## MainMenu — title screen. Built in code so the .tscn stays trivial.
-
-const GAME_SCENE := "res://scenes/game.tscn"
-
 var _continue_button: Button
-
+var _settings: Control
+var _panel: Control
+var _message: Label
+var _confirm: ConfirmationDialog
+var _settings_button: Button
 
 func _ready() -> void:
-	_build_ui()
-
-
-func _build_ui() -> void:
-	var bg := ColorRect.new()
-	bg.color = Color("#0f1a22")
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
-
-	var vbox := VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 14)
-	center.add_child(vbox)
-
-	var title := Label.new()
-	title.text = "TIDEWRACK"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 64)
-	title.modulate = Color("#ffd466")
-	vbox.add_child(title)
-
-	var subtitle := Label.new()
-	subtitle.text = "Cape Marrow Light"
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 20)
-	subtitle.modulate = Color(1, 1, 1, 0.6)
-	vbox.add_child(subtitle)
-
-	vbox.add_child(_spacer(24))
-
-	var new_button := _make_button("New Game")
-	new_button.pressed.connect(_on_new_game)
-	vbox.add_child(new_button)
-
-	_continue_button = _make_button("Continue")
+	_panel = UIHelpers.modal("TIDEWRACK - Cape Marrow Light")
+	add_child(_panel)
+	var column := UIHelpers.column(_panel)
+	column.add_child(UIHelpers.text("A quiet place to tend. A disappearance to read."))
+	var new_button := UIHelpers.button("New Game", _request_new)
+	column.add_child(new_button)
+	_continue_button = UIHelpers.button("Continue checkpoint", _continue_game)
 	_continue_button.disabled = not GameState.has_save()
-	_continue_button.pressed.connect(_on_continue)
-	vbox.add_child(_continue_button)
-
-	var settings_button := _make_button("Settings")
-	settings_button.pressed.connect(_on_settings)
-	vbox.add_child(settings_button)
-
-	var quit_button := _make_button("Quit")
-	quit_button.pressed.connect(_on_quit)
-	vbox.add_child(quit_button)
-
+	column.add_child(_continue_button)
+	_settings_button = UIHelpers.button("Settings", _open_settings)
+	column.add_child(_settings_button)
+	column.add_child(UIHelpers.button("Quit", func(): get_tree().quit()))
+	_message = UIHelpers.text("Keyboard: arrows/WASD, Enter/E to interact, J for journal, Esc to pause.\nGamepad: stick/D-pad, bottom button to interact, top button for journal.")
+	column.add_child(_message)
+	_confirm = ConfirmationDialog.new()
+	_confirm.title = "Start a new game?"
+	_confirm.dialog_text = "Your existing checkpoint stays on disk until you explicitly save over it. Unsaved progress will be discarded."
+	_confirm.confirmed.connect(_new_game)
+	add_child(_confirm)
 	new_button.grab_focus()
 
+func _request_new() -> void:
+	if GameState.has_save():
+		_confirm.popup_centered(Vector2i(560, 200))
+		_confirm.get_cancel_button().grab_focus()
+	else:
+		_new_game()
 
-func _make_button(text: String) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(220, 44)
-	button.add_theme_font_size_override("font_size", 22)
-	return button
-
-
-func _spacer(height: int) -> Control:
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, height)
-	return spacer
-
-
-func _on_new_game() -> void:
+func _new_game() -> void:
 	GameState.new_game()
-	get_tree().change_scene_to_file(GAME_SCENE)
+	if get_tree().change_scene_to_file(GameState.current_scene) != OK:
+		_message.text = "The starting room could not be loaded."
 
+func _continue_game() -> void:
+	if not GameState.load_game():
+		_message.text = GameState.last_error
+		return
+	if get_tree().change_scene_to_file(GameState.current_scene) != OK:
+		_message.text = "The saved room could not be loaded."
 
-func _on_continue() -> void:
-	if GameState.load_game():
-		get_tree().change_scene_to_file(GameState.current_scene)
-
-
-func _on_settings() -> void:
-	var settings := preload("res://scenes/ui/settings.tscn").instantiate()
-	add_child(settings)
-
-
-func _on_quit() -> void:
-	get_tree().quit()
+func _open_settings() -> void:
+	if _settings != null:
+		return
+	_panel.hide()
+	_settings = preload("res://scenes/ui/settings.tscn").instantiate()
+	add_child(_settings)
+	_settings.closed.connect(func():
+		_settings = null
+		_panel.show()
+		_settings_button.grab_focus())

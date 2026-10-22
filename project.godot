@@ -14,6 +14,10 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+Controls="*res://scripts/autoload/controls.gd"
+Preferences="*res://scripts/autoload/preferences.gd"
+Journal="*res://scripts/journal.gd"
+
 GameState="*res://scripts/autoload/game_state.gd"
 DialogueManager="*res://scripts/autoload/dialogue_manager.gd"
 
@@ -29,36 +33,7 @@ window/stretch/aspect="keep"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 
-[input]
-
-; Controller support (Public Demo milestone). Gamepad events are layered onto
-; Godot's built-in ui_* actions so the keyboard bindings keep working unchanged.
-ui_accept={
-"deadzone": 0.5,
-"events": [Object(InputEventJoypadButton,"button_index":0)]
-}
-ui_cancel={
-"deadzone": 0.5,
-"events": [Object(InputEventJoypadButton,"button_index":1)]
-}
-ui_left={
-"deadzone": 0.5,
-"events": [Object(InputEventJoypadMotion,"axis":0,"axis_value":-1.0)]
-}
-ui_right={
-"deadzone": 0.5,
-"events": [Object(InputEventJoypadMotion,"axis":0,"axis_value":1.0)]
-}
-ui_up={
-"deadzone": 0.5,
-"events": [Object(InputEventJoypadMotion,"axis":1,"axis_value":-1.0)]
-}
-ui_down={
-"deadzone": 0.5,
-"events": [Object(InputEventJoypadMotion,"axis":1,"axis_value":1.0)]
-}
-
 [global]
 
-; Steam Next Fest demo build — feature-frozen for the public demo (2026-08).
+; Demo implementation revision, 2026-10-22. Export acceptance still required.
 demo_build=true

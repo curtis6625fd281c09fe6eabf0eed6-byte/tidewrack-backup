@@ -1,5 +1,7 @@
 # Tidewrack — Milestones
 
+> **Implementation update:** the code gaps below were audited before the 22 October implementation. Journal, lamp-room flow, collision, menu handling and save protection have since been implemented and passed headless checks. See [current implementation notes](implementation-2026-10-22.md); the historical audit below is retained as context. Physical-device, visual and export acceptance remain outstanding.
+
 ## Reconciled demo source and priorities - 2026-10-22
 
 **Owner-confirmed source:** the owner confirmed that `curtis6625fd281c09fe6eabf0eed6-byte/tidewrack-backup` is the source that would have gone out as the demo. This supersedes the earlier interpretation that it might be an unrelated backup. Treat its implementation gaps as demo-source gaps. The original code-review baseline was tree `8c9b1e407afe178a6287c6646705185d2e356e3c`; subsequent changes in this reconciliation are documentation only.

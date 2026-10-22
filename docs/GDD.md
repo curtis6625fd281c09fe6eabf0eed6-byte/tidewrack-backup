@@ -22,12 +22,12 @@ who answers you) responds. Repeat across locations toward the water.
 | System | State | Notes |
 |--------|-------|-------|
 | Branching dialogue | ✅ vertical slice | JSON graphs, choices set flags. |
-| Save / load        | ✅ vertical slice | Single slot, `user://save.json`. |
-| Menus + settings   | ✅ vertical slice | Title, pause, volume, fullscreen. |
-| Player movement    | ✅ vertical slice | Top-down; wall collision pending. |
-| Journal            | ⏳ demo           | Tracks discovered logs; re-readable. |
-| Second location    | ⏳ demo           | The lamp room. |
-| Controller + remap  | ⏳ demo          | Currently keyboard-only, built-in actions. |
+| Save / load        | Implemented + headless tested | Room-entry checkpoint, validated writes and recovery backup. |
+| Menus + settings   | Implemented + headless tested | Modal ownership, persisted settings, timed display rollback. |
+| Player movement    | Implemented + headless tested | CharacterBody2D and room/obstacle collision. |
+| Journal            | Implemented + headless tested | Discoveries, reader UI, persistence and new-game reset. |
+| Second location    | Implemented + headless tested | Lamp room, tending sequence, return route and closing beat; narrative review pending. |
+| Controller + remap  | Partial | Explicit keyboard/pad bindings and text hints; physical-device acceptance and rebinding UI remain. |
 | Localization        | ⏳ press build    | String extraction + translation tables. |
 | Accessibility       | ⏳ press build    | Text scale, dyslexia-friendly font, no-flash. |
 | Steam integration   | ⏳ launch         | Achievements, cloud saves. |

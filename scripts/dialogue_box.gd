@@ -31,7 +31,7 @@ func _ready() -> void:
 func _build_ui() -> void:
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	margin.offset_top = -240
+	margin.offset_top = -360
 	margin.add_theme_constant_override("margin_left", 48)
 	margin.add_theme_constant_override("margin_right", 48)
 	margin.add_theme_constant_override("margin_bottom", 32)
@@ -50,9 +50,10 @@ func _build_ui() -> void:
 	vbox.add_child(_speaker_label)
 
 	_text_label = RichTextLabel.new()
-	_text_label.fit_content = true
-	_text_label.bbcode_enabled = true
-	_text_label.custom_minimum_size = Vector2(0, 96)
+	_text_label.fit_content = false
+	_text_label.scroll_active = true
+	_text_label.bbcode_enabled = false
+	_text_label.custom_minimum_size = Vector2(0, 150)
 	_text_label.add_theme_font_size_override("normal_font_size", 20)
 	vbox.add_child(_text_label)
 
@@ -77,7 +78,8 @@ func _on_line(speaker: String, text: String, choices: Array) -> void:
 	_full_text = text
 	_revealed = 0.0
 	_typing = true
-	_text_label.text = ""
+	_text_label.text = _full_text
+	_text_label.visible_characters = 0
 	_has_choices = not choices.is_empty()
 	_clear_choices()
 	if _has_choices:
@@ -86,6 +88,9 @@ func _on_line(speaker: String, text: String, choices: Array) -> void:
 			var choice: Dictionary = choices[i]
 			var button := Button.new()
 			button.text = str(choice.get("text", "..."))
+			button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			button.custom_minimum_size.y = 44
+			button.add_theme_font_size_override("font_size", 20)
 			button.disabled = true  # enabled once text finishes typing
 			button.pressed.connect(_on_choice_pressed.bind(i))
 			_choice_box.add_child(button)
@@ -94,11 +99,12 @@ func _on_line(speaker: String, text: String, choices: Array) -> void:
 
 
 func _process(delta: float) -> void:
+	_continue_hint.text = "[%s] Reveal / continue" % Controls.hint("ui_accept")
 	if not _typing:
 		return
-	_revealed = min(_revealed + TEXT_SPEED * delta, float(_full_text.length()))
-	_text_label.text = _full_text.substr(0, int(_revealed))
-	if int(_revealed) >= _full_text.length():
+	_revealed = min(_revealed + TEXT_SPEED * delta, float(_text_label.get_total_character_count()))
+	_text_label.visible_characters = int(_revealed)
+	if int(_revealed) >= _text_label.get_total_character_count():
 		_typing = false
 		_on_text_complete()
 
@@ -113,16 +119,16 @@ func _on_text_complete() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not DialogueManager.is_active or _has_choices:
+	if not DialogueManager.is_active or event.is_echo():
 		return
 	if event.is_action_pressed("ui_accept"):
 		if _typing:
 			# Fast-forward the typewriter on the first press.
-			_revealed = float(_full_text.length())
-			_text_label.text = _full_text
+			_revealed = float(_text_label.get_total_character_count())
+			_text_label.visible_characters = -1
 			_typing = false
 			_on_text_complete()
-		else:
+		elif not _has_choices:
 			DialogueManager.advance()
 		get_viewport().set_input_as_handled()
 
@@ -138,4 +144,5 @@ func _on_finished() -> void:
 
 func _clear_choices() -> void:
 	for child in _choice_box.get_children():
+		_choice_box.remove_child(child)
 		child.queue_free()

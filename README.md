@@ -6,9 +6,7 @@ rowed out into the fog eleven days ago and did not come back.
 
 Built solo by **Fogline Games** (Seattle) in **Godot 4**, shipping to Steam.
 
-> **Status:** Public-demo candidate (Steam Next Fest). Vertical slice +
-> branching conversation with save/load. See [`docs/milestones.md`](docs/milestones.md)
-> for the road to launch.
+> **Status (reconciled 2026-10-22):** Backup snapshot with vertical-slice code and incomplete demo scaffolds. It has not been matched to the shipped Steam demo. No tags are present in this connected repository; the previously claimed `v0.2-demo-rc` tag cannot be resolved. See [`docs/milestones.md`](docs/milestones.md) for the evidence reconciliation.
 
 ## Controls
 
@@ -19,8 +17,7 @@ Built solo by **Fogline Games** (Seattle) in **Godot 4**, shipping to Steam.
 | Advance / skip line | Enter / Space     |
 | Pause / back  | Esc                     |
 
-The game uses only Godot's built-in input actions, so it works with no input
-remapping (controller support and remappable keys are a Public Demo milestone).
+The table describes the documented keyboard controls. The snapshot overrides the built-in input actions with gamepad events in `project.godot`; keyboard coexistence and runtime input behavior have not been verified.
 
 ## Running it
 
@@ -102,9 +99,4 @@ godot --headless --path . --check-only   # parse all scripts
 
 ## Steam Next Fest demo
 
-The public demo (target: **Steam Next Fest**) extends the vertical slice with
-the lamp-room chapter, a discovered-logs journal, and controller support. Demo
-scope is locked in [`docs/milestones.md`](docs/milestones.md); the build is
-feature-frozen and tagged `v0.2-demo-rc`.
-
-Demo controls add a gamepad (analog stick + A/B) on top of the keyboard bindings.
+The documented intended demo scope adds the lamp room, discovered-logs journal, controller support and playtest fixes. This snapshot contains journal and lamp-room scaffolds and gamepad mappings; it does not establish completion or inclusion in the Steam build. The historical feature-freeze/tag claim is unverified: no `v0.2-demo-rc` tag is present here. See [`docs/milestones.md`](docs/milestones.md) for the scope conflict and verification requirements.

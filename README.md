@@ -6,7 +6,7 @@ rowed out into the fog eleven days ago and did not come back.
 
 Built solo by **Fogline Games** (Seattle) in **Godot 4**, shipping to Steam.
 
-> **Status (reconciled 2026-10-22):** Backup snapshot with vertical-slice code and incomplete demo scaffolds. It has not been matched to the shipped Steam demo. No tags are present in this connected repository; the previously claimed `v0.2-demo-rc` tag cannot be resolved. See [`docs/milestones.md`](docs/milestones.md) for the evidence reconciliation.
+> **Status (owner-confirmed, reconciled 2026-10-22):** This repository is the source the owner identifies as the demo source. Journal, lamp-room and collision work remain incomplete. The `v0.2-demo-rc` tag is missing; exact export/build provenance and runtime acceptance remain outstanding. See [`docs/milestones.md`](docs/milestones.md) for prioritized work.
 
 ## Controls
 
@@ -99,4 +99,4 @@ godot --headless --path . --check-only   # parse all scripts
 
 ## Steam Next Fest demo
 
-The documented intended demo scope adds the lamp room, discovered-logs journal, controller support and playtest fixes. This snapshot contains journal and lamp-room scaffolds and gamepad mappings; it does not establish completion or inclusion in the Steam build. The historical feature-freeze/tag claim is unverified: no `v0.2-demo-rc` tag is present here. See [`docs/milestones.md`](docs/milestones.md) for the scope conflict and verification requirements.
+The documented intended demo scope adds the lamp room, discovered-logs journal, controller support and playtest fixes. The owner has confirmed this repository is the demo source. Its journal and lamp-room scaffolds are therefore genuine implementation gaps against the intended demo scope. Gamepad mappings exist, but complete input support still needs verification. The historical feature-freeze/tag claim is unverified: no `v0.2-demo-rc` tag is present here. See [`docs/milestones.md`](docs/milestones.md) for the scope conflict and verification requirements.
